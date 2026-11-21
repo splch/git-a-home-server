@@ -34,6 +34,7 @@ RESTIC_PASSWORD=$password docker compose run --rm restic init
 # This repository and its secrets. The push triggers the first deploy.
 api user/repos -d '{"name": "home-server", "private": true}'
 api "repos/$repo/collaborators/renovate" -X PUT -d '{"permission": "write"}'
+api "repos/$repo/branch_protections" -d '{"rule_name": "master", "enable_push": true, "enable_status_check": true, "status_check_contexts": ["*test (pull_request)"]}'
 api "repos/$repo/actions/secrets/RENOVATE_TOKEN" -X PUT -d "{\"data\": \"$renovate\"}"
 api "repos/$repo/actions/secrets/RESTIC_PASSWORD" -X PUT -d "{\"data\": \"$password\"}"
 url=$(docker compose exec -T forgejo printenv FORGEJO__server__ROOT_URL)$repo
