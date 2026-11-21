@@ -97,7 +97,7 @@ until Forgejo times it out.
   while it is written can produce a file that will not open. Paused, the copy
   is what a power cut would leave, which databases are built to survive. The
   pause lasts as long as the incremental backup, usually seconds. Docker calls
-  a paused container unhealthy until its next check; stop autoheal until then.
+  a paused container unhealthy until its next health check passes.
 - **Jobs have root on the server.** The runner hands them the Docker socket;
   that is what lets them deploy. Registration is disabled. Give an account
   only to someone you would give root.
