@@ -1,0 +1,4 @@
+# Overrides for the throwaway copy that test.yml boots: no host ports.
+services:
+  caddy:
+    ports: !reset []

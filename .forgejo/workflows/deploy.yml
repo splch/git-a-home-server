@@ -1,0 +1,24 @@
+# Apply compose.yaml to the server and wait for every health check.
+# Runs nightly too, which undoes drift and re-checks health.
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: docker
+    container: docker:29.10.0-cli
+    steps:
+      - run: git clone -q --depth 1 http://x:${{ forgejo.token }}@forgejo:3000/${{ forgejo.repository }} .
+      - run: docker compose up -d --wait --remove-orphans
+      # The runner cannot replace itself mid-job, so a detached container with
+      # this job's image does it: told to stop, the runner finishes this job
+      # first, then is recreated.
+      - run: |
+          image=$(docker inspect -f '{{.Config.Image}}' $HOSTNAME)
+          id=$(docker create --rm -v /var/run/docker.sock:/var/run/docker.sock -w /repo $image docker compose up -d runner)
+          docker cp -q . $id:/repo
+          docker start $id

@@ -1,0 +1,18 @@
+# Open a pull request for every new image version. See renovate.json.
+on:
+  schedule:
+    - cron: "0 3 * * *" # after the nightly backup
+  workflow_dispatch:
+
+jobs:
+  renovate:
+    runs-on: docker
+    container: ghcr.io/renovatebot/renovate:44
+    steps:
+      - run: renovate
+        env:
+          RENOVATE_PLATFORM: forgejo
+          RENOVATE_ENDPOINT: http://forgejo:3000
+          RENOVATE_GIT_URL: endpoint
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_REPOSITORIES: ${{ forgejo.repository }}

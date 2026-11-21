@@ -1,0 +1,89 @@
+# The whole server. CI applies this file on every push to master.
+name: home
+
+configs:
+  # Routes: one site block per service. `http://` serves plain HTTP; remove it
+  # once the names are public DNS names and Caddy will get certificates itself.
+  caddyfile:
+    content: &caddyfile |
+      http://git.localhost {
+        reverse_proxy forgejo:3000
+      }
+      http://hello.localhost {
+        reverse_proxy hello:80
+      }
+
+  runner:
+    content: &runner |
+      runner:
+        labels: [docker] # jobs set their own image
+        shutdown_timeout: 1h # finish the running job before stopping
+      container:
+        network: home_default # jobs reach Forgejo at http://forgejo:3000
+        docker_host: automount # jobs get the host's Docker socket
+      server:
+        connections:
+          forgejo:
+            url: http://forgejo:3000
+            uuid: 30303030-3030-3030-3030-303030303031 # see bootstrap.sh
+            token_url: file:/data/token
+
+services:
+  # Front door: the only published ports.
+  caddy:
+    image: caddy:2.11.9
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    configs: [{source: caddyfile, target: /etc/caddy/Caddyfile}]
+    labels: {config: *caddyfile} # Compose only notices a config change through the service
+    volumes: [caddy:/data]
+    healthcheck: {test: "wget -qO /dev/null http://127.0.0.1:2019/config/", interval: 10s}
+
+  # Git hosting and CI.
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:17.0.2
+    restart: unless-stopped
+    environment:
+      FORGEJO__server__ROOT_URL: http://git.localhost/
+      FORGEJO__server__DISABLE_SSH: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+    volumes: [forgejo:/data]
+    healthcheck: {test: "curl -fsS http://127.0.0.1:3000/api/healthz", interval: 10s}
+
+  # Example service. Copy this block and its site block to add your own.
+  hello:
+    image: nginx:1.30.7-alpine
+    restart: unless-stopped
+    healthcheck: {test: "wget -qO /dev/null http://127.0.0.1", interval: 10s}
+
+  # Runs CI jobs with the host's Docker. A job cannot replace the runner it
+  # runs on, so the profile keeps `docker compose up` away from it; deploy.yml
+  # updates it separately.
+  runner:
+    image: data.forgejo.org/forgejo/runner:13.2.2
+    profiles: [ci]
+    restart: unless-stopped
+    user: root # to use the Docker socket
+    command: forgejo-runner daemon --config /config.yaml
+    stop_grace_period: 1h # as long as the runner's shutdown_timeout
+    configs: [{source: runner, target: /config.yaml}]
+    labels: {config: *runner}
+    volumes: [runner:/data, /var/run/docker.sock:/var/run/docker.sock]
+
+  # Backups: `docker compose run --rm restic <command>`. See cron.yml.
+  restic:
+    image: restic/restic:0.20.0
+    profiles: [cron]
+    hostname: home # restic groups snapshots by hostname
+    environment:
+      RESTIC_REPOSITORY: /repo # or sftp:, s3:, b2:, rest: for off-site
+      RESTIC_PASSWORD: # from the job's environment
+    volumes:
+      - /var/lib/docker/volumes:/var/lib/docker/volumes # every volume on the server
+      - /srv/backup:/repo # put this on another disk
+
+volumes:
+  caddy:
+  forgejo:
+  runner:
